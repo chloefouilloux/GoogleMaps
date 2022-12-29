@@ -1,0 +1,426 @@
+#Libraries ----
+
+library(ggplot2)
+library(ggmap)
+library(maptools)
+
+#maybe
+library(rnaturalearth) #all countries in the world
+library(rnaturalearthdata)
+library(rgeos)
+
+#this seems good
+library(sf) #countryshapefiles
+library(ggsn) #scalebar
+library(rcartocolor) 
+
+#For heatmaps data frame
+library(tidyverse)
+library(corrplot)
+library(heatmaply)
+library(gghighlight)
+
+#text
+#A WHOLE NEW WAY TO WASTE TIME! <3
+## add fonts via showtext
+library(showtext)
+?font_add_google()
+font_add_google("Cinzel", "Cinzel") #Pacifico
+font_add_google("Comfortaa", "Comfortaa")
+showtext_auto()
+
+```
+
+#Load and Tidy data
+
+```{r}
+#first, let's get our data!
+#LET'S LOOK AT THIS DATA SET A LITTLE BIT HERE. 
+data("quakes")
+
+#Section 2
+data("LakeHuron")
+
+#So we've got a timeseries and it is coded so bizarrely.
+
+class(LakeHuron) #ts, lol
+
+lh<- as_tibble(LakeHuron) %>% #ask what function we use. . . 
+     mutate("Water_m" = x,
+            Water_m = as.numeric(Water_m)) %>%
+    add_column(year= c(1875:1972))
+
+#we need things to get a little shorter
+
+#DO THIS wrangle AFTER RIBBON PLOT
+lhslice <- lh %>%
+          sample_n(., size = 30) %>%
+          arrange(desc(Water_m))
+
+```
+
+
+#Theme Set
+```{r}
+theme_set(theme( 
+        text = element_text(size = 12),
+        strip.background = element_rect(
+          color="black", fill="white", size=0.5, linetype="solid")))
+```
+
+Now lets see what we got here. 
+
+1. Google cloud console
+https://console.cloud.google.com/apis/credentials/key/55fdb536-edfd-4dfa-9095-81bb8b2d6b39?project=setti-fadma
+
+
+```{r}
+
+register_google(key = "AIzaSyCuSkVVi79KRTbrscdPsajgzEPKJkgaGCo") #new key
+
+
+map2<- get_map(location = c(177.977194, -30), 
+                maptype = "satellite", zoom = 4) #figi (long/lat)
+
+#do an example of where someone wants to be on the world in google!
+  
+#maptype = c("terrain",
+  #"terrain-background", "satellite", "roadmap", "hybrid", "toner",
+  #"watercolor", "terrain-labels", "terrain-lines", "toner-2010",
+  #"toner-2011", "toner-background", "toner-hybrid", "toner-labels",
+  #"toner-lines", "toner-lite")
+
+map3<- get_map(location = c(177.977194, -30), 
+                maptype = "watercolor", zoom = 4) #figi (long/lat)
+
+map4<- get_map(location = c(177.977194, -30), 
+                maptype = "terrain", zoom = 4) #figi (long/lat)
+
+?get_map
+
+fiji<- ggmap(map3)
+
+fiji1<-ggmap(map2)
+
+fiji2<-ggmap(map4)
+
+fiji
+fiji1
+fiji2
+
+```
+
+
+Alright, let's plot some data
+
+#Cute maps
+
+First, we are going to create what I believe will be the most artistic plot of this class. 
+```{r}
+
+x_lim <- fiji$data
+
+fiji +
+geom_point(data = quakes, aes(x = long, y = lat, fill = depth), 
+           alpha = 0.7, shape = 21) + 
+scale_fill_carto_c(palette = "PurpOr", #SunsetDark
+                   name = "Depth (m)") +  #177.977194, -30
+    ggsn::scalebar(x.min = 190, x.max = 200,
+             y.min = -47, y.max = -40,
+             dist = 500,
+             transform = T,
+             dist_unit = 'km',
+             model = 'WGS84', 
+#WGS84", "GRS80", "Airy", "International", "Clarke", or "GRS67" There are a bunch of different ways to project the world!
+             st.bottom = T,
+             st.size = 3.5, #size of numbers
+             st.dist = 0.1, #numbers from scalebar 
+             height = 0.1,#height of scaleba
+             box.fill = c("purple", "#faf4fa"), 
+             box.color = "black") + 
+  xlab("Longitude")+
+  ylab("Latitude")+
+  theme_bw()
+
+
+?ggsn::scalebar
+
+  
+```
+
+Alrighty, now that was a lot of fun! 
+How about some density maps!
+
+#Density
+
+```{r}
+fijidens<-
+fiji1 +
+geom_point(data = quakes, aes(x = long, y = lat), 
+           alpha = 0.3, shape = 21, fill = "lightgrey")+ #fill = "lightgrey"
+stat_density2d(data = quakes,
+              aes(x = long, y = lat, 
+                  fill = ..level.., 
+                  alpha = ..level..),
+                 colour = "black", #"transparent" FIRST DO BLACK, THEN SET TRANS
+                 size = 0.15,
+                 bins = 10,
+                 geom = "polygon")+
+  scale_fill_gradient(low = "green", high = "#e03a00", 
+                      breaks=c(0.005, 0.015), #c(10000, 30000)
+                      labels=c("Low","High"), 
+                      name = "Overall density") + 
+  xlab("Longitude")+
+  ylab("Latitude") +
+  guides(alpha = "none")
+
+fijidens
+
+```
+
+#Heatmaps Baby!
+
+Quick and dirty introduction to heatmaps.
+
+Alright moving on to the next requested chart type: HEAT MAPS BABYYYY
+
+```{r}
+#State might actually be better here
+
+data(state) #select state.x77
+
+state_1 <- as_tibble(state.x77)
+
+#For correlation plot heat maps, only numeric variables are allowed, so this is perfect.
+
+cor1<-cor(state_1)
+
+corrplot(cor1, method = "color", type = "upper", order = "alphabet", 
+         tl.col = "black", tl.cex = 1, tl.srt = 70, addCoef.col ='black')
+#method = “circle”, “square”, “ellipse”, “number”, “shade”, “color”, “pie”
+#order = c("original", "AOE", "FPC", "hclust", "alphabet"),
+#hclust.method = c("complete", "ward", "ward.D", "ward.D2", "single", "average",#"mcquitty", "median", "centroid"),
+
+#Looks pretty cool! But we can do MORE
+#THESE ARE INTERACTIVE PLOTS!!!!
+
+heatmaply_cor(cor1, 
+              scale = "column")
+#subtract the mean and divide by the standard deviation
+
+#normalize = scale by subtracting the minimum and dividing by the maximum of all observations.
+
+?heatmaply_cor
+
+heatmaply_cor(normalize(cor1), 
+              col = viridis(100)) #
+#notice negative numbers are gone
+#Of course here we would now need to change up the scale bar. . . 
+
+heatmaply(normalize(cor1), 
+              col = viridis(100))
+
+#but we can also look at a specific value in comparison to all of the others, let's say we're just interested in murder
+
+#Pull out variables of interest.
+heatmaply(normalize(cor1)[c("Murder", "Population"),], 
+              col = viridis(100))
+
+#Of course we can change our color palette, 
+#I think I like defining a mid here, because the 
+#data here have been normalized.
+
+heatmaply(normalize(cor1), 
+            scale_fill_gradient_fun = 
+            ggplot2::scale_fill_gradient2(
+            low = "white",
+            mid = "#3BA9A9",
+            high = "#056D90", 
+            midpoint = 0.5, 
+            limits = c(0, 1)))
+
+```
+
+#LOLLIPOP CHARTS----
+
+FIRST, let's remember Fiji and introduce coord_polar to the show.
+We are also going to get into a messy data set and do what we can here.
+
+We have been talking about all of these different ways to visualize information, but I have only been teaching you graphing methods with Cartesian coordinates. We can get waaaaay crazier than this.
+```{r}
+fijidens + 
+  coord_polar() +
+  theme_bw()
+
+#But we can look at another data set to maybe fill this out a little bit better
+
+#In this next part of the lecture, I'm going to kill several birds with one stone, we are going to attack polar coordinates, data wrangling and lollipop charts all in one go! Let's see how this works out. . . 
+
+#GO BACK TO LECTURE AND DECOMPOSE PLOTS!
+
+#Huron----
+
+#Go up to data tidying session
+
+#Ribbon plot----
+ggplot(lh, aes(y = Water_m, x = year))+ 
+  geom_ribbon(aes(ymin = 576, 
+                  ymax = Water_m), 
+                  alpha = 0.3, 
+                  fill = "blue")+
+  geom_segment(aes(x= year, xend=year, 
+                   y= 576, yend= Water_m))+ #note not from 0
+  geom_point(shape = 21, stroke = 2, 
+             color = "darkblue", 
+             fill = "white") + 
+  #Let's talk about really cool text!
+  geom_text(aes(label = "Water level appears to be \ndeclining in Lake Huron"),
+            family = "Cinzel", #Pacifico
+            x = 1940, 
+            y = 581.5, 
+            check_overlap = T)+
+  xlab("Year")+ 
+  ylab("Water level of Lake Huron (m)")+
+ # theme_bw() + 
+  theme_void() 
+#show what coord_polar does lol
+  
+
+#Here we go
+#Modern----
+
+modern<-
+ggplot(lhslice, 
+         aes(x = reorder(year, -Water_m), y = Water_m))+
+  geom_hline(yintercept = 580, 
+             linetype = "dashed")+
+  geom_segment(aes(x= reorder(year, -Water_m), 
+                   xend=reorder(year, -Water_m), 
+                   y= 576, yend= Water_m))+ #move order behind points
+  geom_point(aes(color = Water_m, size = Water_m),
+             shape = 21, stroke = 2, 
+             #color = "darkblue", 
+             fill = "white") +
+  geom_text(aes(label = ifelse(Water_m > 580, year, NA)), 
+            nudge_x = 0.5, 
+            nudge_y = 1.2, 
+            angle = 10,
+            family = "Pacifico")+ #angle = 90
+  gghighlight(Water_m > 580, 
+              unhighlighted_params = list(fill = "white"))+
+    coord_polar()+
+    xlab("") + 
+    theme_void()+
+    theme(legend.position = c(.45, .15),
+          legend.title = element_text(family = "Pacifico"), 
+          legend.text = element_text(family = "Pacifico"),
+          panel.background = element_rect(fill = "aliceblue"))+
+  guides(size = "none")+
+  scale_color_carto_c(palette = "Teal", name = "Water level above 580m",
+                    guide = guide_colorbar(direction = "horizontal",
+                            barheight = unit(3, units = "mm"), 
+                            barwidth = unit(80, units = "mm"),
+                            draw.ulim = FALSE, 
+                            title.position = 'top',
+                            title.hjust = 0,
+                            label.hjust = 0.5))
+  
+modern
+  
+#Get me lake Huron, yo!
+
+#Huron Map----
+#https://developers.google.com/maps/documentation/maps-static/styling
+huron<- get_map(location = c(-83, 44.95), 
+                maptype = "watercolor", zoom = 7) 
+
+huron_void<-
+  ggmap(huron) +
+  geom_text(aes(label = "Lake Huron", angle = -20), 
+            x = -82.3,
+            y = 45,
+            size = 5,
+            check_overlap = T,
+            family = "Pacifico") + 
+    geom_text(aes(label = "Census from 1875:1972", angle = -20), 
+            x = -82.3,
+            y = 44.7,
+            check_overlap = T,
+            fontface = "bold",
+            family = "Comfortaa")+
+  theme_void()
+
+huron_void
+
+#combine
+
+library(gridExtra)
+
+grid.arrange(huron_void, modern, ncol =2, 
+             widths = c(0.5, 0.5))
+
+```
+
+#BONUS CODE:
+We need to make a seating chart for Werewolf! No one wants
+to sit next to Cyril because last week he got really powerful
+cards that can kill everyone next to him.
+
+Thus, we can use ggnet2 to help us randomize and decide 
+who will be foreced to sit next to Cyril next week. . . 
+
+```{r}
+
+#Load your libraries!----
+  
+library(GGally)
+library(ggnet)
+library(network)
+library(sna)
+library(ggplot2)
+
+#maybe
+library(rcartocolor)
+library(ggtext)
+library(ggrepel)
+
+sample(1:12)
+#generate and store random sample
+rand<-
+sample(c("Santtu", "Chloe", "Cyril", "Justine",
+                "Lutz", "Jimi", "Ilkka", "Mariana", 
+                "Matteo", "Charles", "Steve", "Sara"))
+
+net = rgraph(12, 
+             mode = "graph", 
+             tprob = 0) #change to > 0 for links
+
+net = network(net, direct = F)
+
+net %v% "Players" = rand
+
+lab_html <- "<i>Avoid</i> <b style='color:red'>Cyril</b>
+            <i>at all costs,<br> he's gone MAD</i>"
+
+#net1<-
+ggnet2(net, 
+       color = "Players",
+       #label = "Players",
+       node.size = 10, 
+       edge.lty = "dashed",
+       edge.size = 0.1,
+       label.size = 3,
+       node.alpha = 1,
+       mode = "circle", 
+       palette = "Set3", 
+       legend.position = "bottom") +
+  geom_point(aes(color = color), size = 12, alpha = 0.5, 
+             shape = 21, stroke = 2)+
+  geom_text(aes(label = color), color = "black", size = 3,
+            fontface = "bold") +
+  geom_richtext(aes(x = 0.5, y= 0.5, label = lab_html))+
+  #scale_color_carto_d(palette = "Pastel")+
+  theme( panel.border = element_rect(color = "black", fill = "transparent", size = 1.5),
+         panel.background = element_rect(fill = "aliceblue"))
+
+```
